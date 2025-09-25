@@ -1,6 +1,17 @@
 import { NextResponse } from "next/server"
 
-const SHOPIFY_BASE_URL = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2025-01`
+const SHOPIFY_BASE_URL = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2025-01`;
+
+export async function OPTIONS() {
+    // Preflight response
+    return NextResponse.json({}, {
+        headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        },
+    })
+}
 
 export async function POST(req) {
     try {
