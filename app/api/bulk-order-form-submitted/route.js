@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 
-const ZOHO_FLOW_WEBHOOK = "https://flow.zoho.com/898405621/flow/webhook/incoming?zapikey=1001.b38a0c21ea1de515f09b65043e400905.ef94575389933bef275077d49f3ea287&isdebug=false"
 const ZOHO_FLOW_BULK_ORDER_FORM = "https://flow.zoho.com/898405621/flow/webhook/incoming?zapikey=1001.c84bddda4bddf66e04028a2dd1511ef4.839036d35416229a05c4262768e3298a&isdebug=false"
 
 export async function OPTIONS() {
@@ -49,11 +48,8 @@ async function getPhoneFromShopify(email) {
             }
         )
 
-        const data = await response.json()
-        console.log("data", data)
+        const data = await response.json();
         const customer = data?.data?.customers?.edges?.[0]?.node
-
-        console.log("customer", customer)
 
         // Use defaultPhoneNumber instead of phone
         return customer?.defaultPhoneNumber || ""
@@ -65,7 +61,6 @@ async function getPhoneFromShopify(email) {
 
 
 export async function POST(req) {
-    console.log("hey")
     try {
         // Parse incoming request JSON
         const body = await req.json()
@@ -90,7 +85,7 @@ export async function POST(req) {
         // console.log("formData", payload);
 
         // Send to Zoho Flow webhook
-        const response = await fetch(ZOHO_FLOW_WEBHOOK, {
+        const response = await fetch(ZOHO_FLOW_BULK_ORDER_FORM, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
