@@ -13,13 +13,68 @@ export async function OPTIONS() {
     })
 }
 
+async function getPhoneFromShopify(email) {
+    if (!email) return ""
+
+    try {
+        const query = `
+      query getCustomerByEmail($email: String!) {
+        customers(first: 1, query: $email) {
+          edges {
+            node {
+              id
+              email
+              phone
+              firstName
+              lastName
+            }
+          }
+        }
+      }
+    `
+
+        const response = await fetch(
+            `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2025-01/graphql.json`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_TOKEN,
+                },
+                body: JSON.stringify({
+                    query,
+                    variables: { email },
+                }),
+            }
+        )
+
+        const data = await response.json()
+        console.log("data", data)
+        const customer = data?.data?.customers?.edges?.[0]?.node
+
+        console.log("customer", customer)
+
+        // Use defaultPhoneNumber instead of phone
+        return customer?.defaultPhoneNumber || ""
+    } catch (err) {
+        console.error("Shopify fetch error:", err)
+        return ""
+    }
+}
+
+
 export async function POST(req) {
     console.log("hey")
     try {
         // Parse incoming request JSON
         const body = await req.json()
         console.log("body", body)
-        const { name, email, phone, subject, message, formType } = body
+        let { name, email, phone, subject, message, formType } = body;
+
+        // Try to get phone from Shopify if not provided
+        // if (!phone && email) {
+        // phone = await getPhoneFromShopify(email)
+        // }
 
         // Build payload for Zoho Flow
         const payload = {
