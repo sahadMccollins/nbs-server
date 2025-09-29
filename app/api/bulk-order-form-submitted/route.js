@@ -65,7 +65,7 @@ export async function POST(req) {
         // Parse incoming request JSON
         const body = await req.json()
         console.log("body", body)
-        let { name, email, phone, subject, message, formType } = body;
+        let { name, email, phone, company, subject, message, formType } = body;
 
         // Try to get phone from Shopify if not provided
         // if (!phone && email) {
@@ -80,6 +80,7 @@ export async function POST(req) {
             Subject: subject || "",
             Message: message || "",
             FormType: formType || "",
+            Company: company || "",
         }
 
         // console.log("formData", payload);
