@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { zohoFetch } from "../utils/zoho"
+import { zohoFetch } from "../utils/zoho";
+import { zohoBooksFetch } from "../utils/zohoBooks";
 
 const ORG_ID = process.env.ZOHO_ORG_ID;
 
@@ -87,6 +88,17 @@ export async function POST(req) {
                 item_id: item.item_id,
                 rate: item.rate,
                 quantity: item.quantity,
+                tax_exemption_code: "",
+                tax_exemption_id: "",
+                tax_id: "6594601000000189033",
+                tax_name: "Standard Rate",
+                tax_percentage: 5,
+                line_item_taxes: item.line_item_taxes,
+                taxes: item.line_item_taxes.map((tax) => ({
+                    tax_id: tax.tax_id,
+                    tax_name: tax.tax_name,
+                    tax_amount: tax.tax_amount // ⚠️ must match invoice
+                }))
             })),
         };
 
@@ -98,7 +110,37 @@ export async function POST(req) {
             }
         );
 
-        return NextResponse.json({ success: true, data: creditNoteRes });
+        // 4. Create Refund in Zoho Books
+        if (creditNoteRes?.creditnote?.creditnote_id) {
+            const creditNoteId = creditNoteRes.creditnote.creditnote_id;
+            const refundPayload = {
+                date: new Date().toISOString().split("T")[0],
+                refund_mode: "PayTabs",
+                reference_number: invoice.invoice_id,
+                amount: creditNoteRes.creditnote.total,
+                from_account_id: "6594601000000472012",
+                description: "Refund amount for items"
+            };
+
+            const refundRes = await zohoBooksFetch(
+                `https://www.zohoapis.com/books/v3/creditnotes/${creditNoteId}/refunds?organization_id=${ORG_ID}`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(refundPayload),
+                }
+            );
+
+            return NextResponse.json({
+                success: true,
+                data: {
+                    credit_note: creditNoteRes,
+                    refund: refundRes,
+                },
+            });
+        }
+
+
+        // return NextResponse.json({ success: true, data: creditNoteRes });
     } catch (error) {
         console.error("Error:", error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
