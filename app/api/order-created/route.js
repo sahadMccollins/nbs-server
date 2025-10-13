@@ -1,86 +1,96 @@
-import { NextResponse } from "next/server"
-import { getZohoAccessToken } from "@/lib/zoho"
+import { NextResponse } from "next/server";
+import { zohoBooksFetch } from "../utils/zohoBooks";
 
-const ZOHO_BASE_URL = "https://www.zohoapis.com/inventory/v1"
+const ORG_ID = process.env.ZOHO_ORG_ID;
 
 export async function POST(req) {
     try {
-        const shopifyOrder = await req.json()
-        const accessToken = await getZohoAccessToken()
+        const body = await req.json();
+        const order = body;
 
-        // 1️⃣ Get Zoho customer (by email)
-        const customerRes = await fetch(
-            `${ZOHO_BASE_URL}/contacts?organization_id=${process.env.ZOHO_ORG_ID}&email=${shopifyOrder.customer.email}`,
-            { headers: { Authorization: `Zoho-oauthtoken ${accessToken}` } }
-        )
-        const customerData = await customerRes.json()
-
-        console.log("customerRes", customerRes);
-        
-        if (!customerData.contacts || customerData.contacts.length === 0) {
+        if (!order) {
             return NextResponse.json(
-                { error: "Customer not found in Zoho" },
+                { success: false, error: "Shopify order payload missing" },
+                { status: 400 }
+            );
+        }
+
+        const { note, email } = order;
+
+        console.log("Processing order:", note, email);
+
+        // 1️⃣ Check if note (TRN) exists and is valid
+        if (!note) {
+            return NextResponse.json(
+                { success: true, message: "No TRN provided in order note, skipping update" }
+            );
+        }
+
+        const trn = note.trim();
+
+        if (!/^\d{15}$/.test(trn)) {
+            return NextResponse.json(
+                { success: false, error: "Invalid TRN number. Must be 15 digits" },
+                { status: 400 }
+            );
+        }
+
+        if (!email) {
+            return NextResponse.json(
+                { success: false, error: "Customer email not found in order" },
+                { status: 400 }
+            );
+        }
+
+        // 2️⃣ Find customer in Zoho Books by email
+        const customerSearch = await zohoBooksFetch(
+            `https://www.zohoapis.com/books/v3/contacts?email=${encodeURIComponent(
+                email
+            )}&organization_id=${ORG_ID}`
+        );
+
+        if (!customerSearch?.contacts?.length) {
+            return NextResponse.json(
+                { success: false, error: `No Zoho Books customer found for ${email}` },
                 { status: 404 }
-            )
-        }
-        const contactId = customerData.contacts[0].contact_id
-
-        // 2️⃣ Map line items (lookup items by SKU in Zoho)
-        const zohoLineItems = []
-        for (const item of shopifyOrder.line_items) {
-            const itemRes = await fetch(
-                `${ZOHO_BASE_URL}/items?organization_id=${process.env.ZOHO_ORG_ID}&sku=${item.sku}`,
-                { headers: { Authorization: `Zoho-oauthtoken ${accessToken}` } }
-            )
-            const itemData = await itemRes.json()
-            if (itemData.items && itemData.items.length > 0) {
-                zohoLineItems.push({
-                    item_id: itemData.items[0].item_id,
-                    quantity: item.quantity,
-                    rate: item.price,
-                })
-            }
+            );
         }
 
-        // 3️⃣ Build Zoho sales order payload
-        const zohoPayload = {
-            customer_id: contactId,
-            reference_number: shopifyOrder.id.toString(),
-            date: new Date(shopifyOrder.created_at).toISOString().split("T")[0],
-            line_items: zohoLineItems,
-        }
+        const customer = customerSearch.contacts[0];
 
-        // 4️⃣ Create sales order in Zoho
-        const orderRes = await fetch(
-            `${ZOHO_BASE_URL}/salesorders?organization_id=${process.env.ZOHO_ORG_ID}`,
+        // 3️⃣ Update the customer's tax details
+        const updatePayload = {
+            // vat_reg_no: trn,
+            // gcc_vat_treatment: "vat_registered",
+            tax_treatment: "vat_registered",
+            tax_reg_no: trn,
+        };
+
+        const updateRes = await zohoBooksFetch(
+            `https://www.zohoapis.com/books/v3/contacts/${customer.contact_id}?organization_id=${ORG_ID}`,
             {
-                method: "POST",
-                headers: {
-                    Authorization: `Zoho-oauthtoken ${accessToken}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(zohoPayload),
+                method: "PUT",
+                body: JSON.stringify(updatePayload),
             }
-        )
+        );
 
-        const orderResponse = await orderRes.json()
-
-        if (!orderRes.ok) {
+        if (updateRes?.code !== 0) {
             return NextResponse.json(
-                { error: "Failed to create order in Zoho", details: orderResponse },
-                { status: orderRes.status }
-            )
+                { success: false, error: updateRes?.message || "Failed to update customer" },
+                { status: 500 }
+            );
         }
 
         return NextResponse.json({
             success: true,
-            message: "Order created in Zoho",
-            orderResponse,
-        })
+            message: `TRN updated successfully for ${email}`,
+            data: { customer_id: customer.contact_id, trn },
+        });
     } catch (error) {
+        console.error("Error updating TRN:", error);
         return NextResponse.json(
-            { error: "Order webhook processing failed", details: error.message },
+            { success: false, error: error.message },
             { status: 500 }
-        )
+        );
     }
 }
