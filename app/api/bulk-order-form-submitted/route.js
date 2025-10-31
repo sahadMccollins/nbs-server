@@ -65,12 +65,26 @@ export async function POST(req) {
         // Parse incoming request JSON
         const body = await req.json()
         console.log("body", body)
-        let { name, email, phone, company, subject, trnNumber, message, formType } = body;
+        let { name, email, phone, company, subject, trnNumber, message, formType, token } = body;
 
-        // Try to get phone from Shopify if not provided
-        // if (!phone && email) {
-        // phone = await getPhoneFromShopify(email)
-        // }
+        // ✅ Verify reCAPTCHA with Google
+        const verify = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${token}`,
+        });
+        const verification = await verify.json();
+        console.log("reCAPTCHA verification:", verification);
+
+        // ❌ You used res.status — that's Express style, not Next.js
+        if (!verification.success) {
+            return NextResponse.json({ success: false, error: "reCAPTCHA failed" }, { status: 400 });
+        }
+
+        // Optional: double-check score (only for reCAPTCHA v3)
+        if (verification.score && verification.score < 0.5) {
+            return NextResponse.json({ success: false, error: "Low reCAPTCHA score" }, { status: 400 });
+        }
 
         // Build payload for Zoho Flow
         const payload = {
