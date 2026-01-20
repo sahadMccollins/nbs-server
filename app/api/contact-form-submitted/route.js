@@ -101,6 +101,13 @@ export async function POST(req) {
             FormType: formType || "",
         }
 
+        if (!name && !email) {
+            return NextResponse.json(
+                { success: false, error: "Name, Email or Phone is required" },
+                { status: 400 }
+            )
+        }
+
         // console.log("formData", payload);
 
         // Send to Zoho Flow webhook

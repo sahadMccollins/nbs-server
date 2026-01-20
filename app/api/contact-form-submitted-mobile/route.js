@@ -38,7 +38,12 @@ export async function POST(req) {
             FormType: formType || "",
         }
 
-        console.log("formData", payload);
+        if (!name && !email) {
+            return NextResponse.json(
+                { success: false, error: "Name, Email or Phone is required" },
+                { status: 400 }
+            )
+        }
 
         // Send to Zoho Flow webhook
         const response = await fetch(ZOHO_FLOW_WEBHOOK, {
